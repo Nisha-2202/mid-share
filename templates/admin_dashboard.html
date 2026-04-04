@@ -34,39 +34,51 @@
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" onclick="showTab('pending', this)">⏳ Pending ({{ pending_meds|length }})</button>
+    <button class="tab-btn active" onclick="showTab('pending', this)">⏳ Pending Verification ({{ pending_meds|length }})</button>
     <button class="tab-btn" onclick="showTab('all', this)">💊 All Medicines</button>
-    <button class="tab-btn" onclick="showTab('requests', this)">📦 NGO Requests</button>
+    <button class="tab-btn" onclick="showTab('requests', this)">📦 Delivery Tracking</button>
   </div>
 
-  <!-- Tab: Pending -->
+  <!-- Tab: Pending Verification -->
   <div class="tab-pane active" id="tab-pending">
+    <h3 style="margin-bottom:1rem; color:#1a3c2e;">🔍 Medicine Verification</h3>
     {% if pending_meds %}
-    <div class="med-grid">
-      {% for m in pending_meds %}
-      <div class="med-card">
-        {% if m[6] %}
-          <img src="{{ url_for('static', filename='uploads/' ~ m[6]) }}" class="med-photo" alt="{{ m[2] }}"/>
-        {% else %}
-          <div class="med-photo-placeholder">💊</div>
-        {% endif %}
-        <div class="med-body">
-          <div class="med-name">{{ m[2] }}</div>
-          <div class="med-meta">
-            📦 Qty: {{ m[3] }}<br/>
-            📅 Expires: {{ m[4] }}<br/>
-            🙋 Donor: {{ m[9] }}
-          </div>
-          {% if m[5] %}<p style="font-size:0.8rem; color:#6b7c74; margin-top:0.4rem;">{{ m[5] }}</p>{% endif %}
-        </div>
-        <div class="med-footer" style="gap:0.6rem;">
-          <a href="{{ url_for('admin_action', med_id=m[0], action='approve') }}"
-             class="btn btn-secondary btn-sm">✅ Approve</a>
-          <a href="{{ url_for('admin_action', med_id=m[0], action='reject') }}"
-             class="btn btn-danger btn-sm">✗ Reject</a>
-        </div>
-      </div>
-      {% endfor %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Medicine Name</th>
+            <th>Quantity</th>
+            <th>Expiry Date</th>
+            <th>Donor</th>
+            <th>Description</th>
+            <th>Submitted</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in pending_meds %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td><strong>{{ m.name }}</strong></td>
+            <td>{{ m.quantity }}</td>
+            <td>{{ m.expiry_date }}</td>
+            <td>{{ m.donor_name }}</td>
+            <td>{{ m.description or '—' }}</td>
+            <td>{{ m.created_at.strftime('%d %b %Y') if m.created_at else '' }}</td>
+            <td style="white-space:nowrap;">
+              <a href="{{ url_for('admin_action', med_id=m.id, action='approve') }}"
+                 class="btn btn-secondary btn-sm"
+                 onclick="return confirm('Approve this medicine?')">✅ Approve</a>
+              <a href="{{ url_for('admin_action', med_id=m.id, action='reject') }}"
+                 class="btn btn-danger btn-sm"
+                 onclick="return confirm('Reject this medicine?')">✗ Reject</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
     {% else %}
     <div class="empty">
@@ -78,6 +90,7 @@
 
   <!-- Tab: All Medicines -->
   <div class="tab-pane" id="tab-all">
+    <h3 style="margin-bottom:1rem; color:#1a3c2e;">💊 All Medicines</h3>
     <div class="table-wrap">
       <table>
         <thead>
@@ -96,16 +109,20 @@
           {% for m in all_meds %}
           <tr>
             <td>{{ loop.index }}</td>
-            <td><strong>{{ m[2] }}</strong></td>
-            <td>{{ m[3] }}</td>
-            <td>{{ m[4] }}</td>
-            <td>{{ m[9] }}</td>
-            <td><span class="badge badge-{{ m[7] }}">{{ m[7]|capitalize }}</span></td>
-            <td>{{ m[8].strftime('%d %b %Y') if m[8] else '' }}</td>
+            <td><strong>{{ m.name }}</strong></td>
+            <td>{{ m.quantity }}</td>
+            <td>{{ m.expiry_date }}</td>
+            <td>{{ m.donor_name }}</td>
+            <td><span class="badge badge-{{ m.status }}">{{ m.status|capitalize }}</span></td>
+            <td>{{ m.created_at.strftime('%d %b %Y') if m.created_at else '' }}</td>
             <td style="white-space:nowrap;">
-              {% if m[7] == 'pending' %}
-              <a href="{{ url_for('admin_action', med_id=m[0], action='approve') }}" class="btn btn-secondary btn-sm">✅</a>
-              <a href="{{ url_for('admin_action', med_id=m[0], action='reject') }}" class="btn btn-danger btn-sm">✗</a>
+              {% if m.status == 'pending' %}
+              <a href="{{ url_for('admin_action', med_id=m.id, action='approve') }}" class="btn btn-secondary btn-sm"
+                 onclick="return confirm('Approve?')">✅</a>
+              <a href="{{ url_for('admin_action', med_id=m.id, action='reject') }}" class="btn btn-danger btn-sm"
+                 onclick="return confirm('Reject?')">✗</a>
+              {% else %}
+              <span style="color:#aaa; font-size:0.8rem;">{{ m.status|capitalize }}</span>
               {% endif %}
             </td>
           </tr>
@@ -115,8 +132,9 @@
     </div>
   </div>
 
-  <!-- Tab: NGO Requests -->
+  <!-- Tab: Delivery Tracking -->
   <div class="tab-pane" id="tab-requests">
+    <h3 style="margin-bottom:1rem; color:#1a3c2e;">📦 Delivery Tracking</h3>
     {% if all_requests %}
     <div class="table-wrap">
       <table>
@@ -124,31 +142,37 @@
           <tr>
             <th>#</th>
             <th>Medicine</th>
-            <th>NGO</th>
+            <th>NGO Name</th>
             <th>Note</th>
-            <th>Status</th>
-            <th>Date</th>
-            <th>Update Status</th>
+            <th>Current Status</th>
+            <th>Requested On</th>
+            <th>Update Delivery</th>
           </tr>
         </thead>
         <tbody>
           {% for r in all_requests %}
           <tr>
             <td>{{ loop.index }}</td>
-            <td><strong>{{ r[5] }}</strong></td>
-            <td>{{ r[6] }}</td>
-            <td>{{ r[3] or '—' }}</td>
-            <td><span class="badge badge-{{ r[4] }}">{{ r[4]|replace('_',' ')|title }}</span></td>
-            <td>{{ r[7].strftime('%d %b %Y') if r[7] else '' }}</td>
+            <td><strong>{{ r.med_name }}</strong></td>
+            <td>{{ r.ngo_name }}</td>
+            <td>{{ r.note or '—' }}</td>
             <td>
-              <form method="POST" action="{{ url_for('update_delivery', req_id=r[0]) }}" style="display:flex; gap:0.5rem; align-items:center;">
-                <select name="status" class="form-control" style="padding:0.35rem 0.7rem; font-size:0.8rem; width:auto; min-width:120px;">
+              <span class="badge badge-{{ r.status }}">{{ r.status|replace('_',' ')|title }}</span>
+            </td>
+            <td>{{ r.created_at.strftime('%d %b %Y') if r.created_at else '' }}</td>
+            <td>
+              {% if r.status == 'delivered' %}
+                <span style="color:#2e7d52; font-weight:600;">✅ Successfully Delivered</span>
+              {% else %}
+              <form method="POST" action="{{ url_for('update_delivery', req_id=r.id) }}" style="display:flex; gap:0.5rem; align-items:center;">
+                <select name="status" class="form-control" style="padding:0.35rem 0.7rem; font-size:0.8rem; width:auto; min-width:130px;">
                   {% for s in ['pending','approved','in_transit','delivered'] %}
-                  <option value="{{ s }}" {% if r[4] == s %}selected{% endif %}>{{ s|replace('_',' ')|title }}</option>
+                  <option value="{{ s }}" {% if r.status == s %}selected{% endif %}>{{ s|replace('_',' ')|title }}</option>
                   {% endfor %}
                 </select>
-                <button class="btn btn-primary btn-sm" type="submit">Save</button>
+                <button class="btn btn-primary btn-sm" type="submit">Update</button>
               </form>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
