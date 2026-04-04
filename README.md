@@ -1,135 +1,92 @@
-# MediShare — Full Stack Setup Guide
+MediShare — Medicine Donation Platform
+MediShare is a web application that connects medicine donors with NGOs. Donors can list unused medicines, NGOs can request them, and admins verify and manage the process.
 
-## Project Structure
-```
-medishare/
-├── app.py               ← Flask backend (all routes)
-├── schema.sql           ← MySQL database setup
-├── requirements.txt     ← Python packages
-├── templates/
-│   ├── base.html        ← Navbar + layout
-│   ├── index.html       ← Landing page
-│   ├── login.html       ← Login page
-│   ├── register.html    ← Register (Donor / NGO)
-│   ├── donate.html      ← Donate medicine form
-│   ├── donor_dashboard.html
-│   ├── ngo_dashboard.html
-│   └── admin_dashboard.html
-└── static/
-    ├── css/style.css    ← All styles
-    └── uploads/         ← Medicine photos saved here
-```
+🌐 Live Demo
+https://web-production-e49906.up.railway.app
 
----
+📁 Project Structure
+mid-share/
+├── app.py                    ← Flask backend (all routes)
+├── schema.sql                ← MySQL database schema
+├── requirements.txt          ← Python dependencies
+├── Procfile                  ← Railway/Gunicorn start command
+├── runtime.txt               ← Python version
+├── static/
+│   └── css/style.css         ← Stylesheet
+└── templates/
+    ├── base.html             ← Base layout
+    ├── index.html            ← Landing page
+    ├── login.html            ← Login page
+    ├── register.html         ← Register (Donor / NGO)
+    ├── donate.html           ← Donate medicine form
+    ├── donor_dashboard.html  ← Donor view
+    ├── ngo_dashboard.html    ← NGO view
+    └── admin_dashboard.html  ← Admin panel
 
-## Step 1 — Install Python & MySQL
+⚙️ Tech Stack
 
-Make sure you have:
-- Python 3.8+ → https://python.org
-- MySQL 8.0+  → https://dev.mysql.com/downloads/
+Backend: Python, Flask
+Database: MySQL
+Frontend: HTML, CSS (Jinja2 templates)
+Deployment: Railway
 
----
 
-## Step 2 — Install Python Packages
+👥 User Roles
+RoleHow to AccessDonorRegister on the website → select "Donor"NGORegister on the website → select "NGO"AdminCredentials managed privately by the administrator
 
-Open terminal inside the `medishare/` folder:
+🚀 How to Use
+As a Donor:
 
-```bash
-pip install -r requirements.txt
-```
+Register → select Donor
+Login → click "+ Donate Medicine"
+Fill in medicine name, quantity, expiry date, and upload a photo
+Submit → wait for admin verification
 
-If flask-mysqldb gives error on Windows, try:
-```bash
-pip install flask flask-mysqldb mysqlclient werkzeug
-```
+As an NGO:
 
----
+Register → select NGO
+Login → browse available (approved) medicines
+Click "Request This" on any medicine
+Track your request status in the "My Requests" tab
 
-## Step 3 — Set Up MySQL Database
+As Admin:
 
-Open MySQL and run:
+Login with admin credentials
+Review pending donations → Approve or Reject
+Manage NGO requests → update delivery status
 
-```bash
-mysql -u root -p < schema.sql
-```
 
-Or open MySQL Workbench and paste the contents of `schema.sql`.
+🗄️ Database Setup (for local development)
 
----
+Install MySQL and create a database
+Run the schema:
 
-## Step 4 — Set Admin Password
+bashmysql -u root -p your_database < schema.sql
 
-After running schema.sql, set a real admin password:
+Set environment variables:
 
-```bash
-python3 -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('admin123'))"
-```
+MYSQL_HOST=localhost
+MYSQL_USER=root
+MYSQL_PASSWORD=your_password
+MYSQL_DB=your_database
+MYSQL_PORT=3306
+SECRET_KEY=your_secret_key
 
-Copy the output hash, then in MySQL run:
-```sql
-USE medishare;
-UPDATE users SET password='PASTE_HASH_HERE' WHERE email='admin@medishare.com';
-```
+Install dependencies:
 
----
+bashpip install -r requirements.txt
 
-## Step 5 — Configure app.py
+Run the app:
 
-Open `app.py` and update line 13:
-```python
-app.config['MYSQL_PASSWORD'] = 'your_actual_mysql_password'
-```
+bashpython app.py
 
----
+📦 Deployment
+This project is deployed on Railway using:
 
-## Step 6 — Run the Website
+Gunicorn as the WSGI server
+Railway MySQL as the database
+Environment variables for all sensitive configuration
 
-```bash
-python app.py
-```
 
-Open your browser at: https://mid-share-production.up.railway.app/
-
----
-
-## User Accounts
-
-| Role  | Email                 | Password   |
-|-------|-----------------------|------------|
-| Admin | admin@medishare.com   | admin123   |
-| Donor | Register on website   | your choice |
-| NGO   | Register on website   | your choice |
-
----
-
-## How to Use
-
-### As a Donor:
-1. Register → select "Donor"
-2. Login → click "+ Donate Medicine"
-3. Fill medicine name, quantity, expiry, upload photo
-4. Submit → wait for admin to verify
-
-### As an NGO:
-1. Register → select "NGO"
-2. Login → browse available medicines
-3. Click "Request This" on any medicine
-4. Track status in "My Requests" tab
-
-### As Admin:
-1. Login with admin@medishare.com
-2. See all pending donations → Approve or Reject
-3. Manage NGO requests → update delivery status
-
----
-
-## Common Errors
-
-**MySQL connection error:**  
-Check MYSQL_PASSWORD in app.py, make sure MySQL is running.
-
-**ModuleNotFoundError:**  
-Run `pip install flask flask-mysqldb werkzeug`
-
-**Upload folder error:**  
-Make sure `static/uploads/` folder exists.
+📌 Note
+This is a final year college project built to demonstrate a full-stack web application using Python (Flask) and MySQL.
