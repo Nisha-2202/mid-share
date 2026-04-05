@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}NGO Dashboard — MediShare{% endblock %}
 {% block content %}
-
+ 
 <div class="page-header">
   <div class="inner">
     <div class="label">NGO Portal</div>
@@ -9,37 +9,32 @@
     <p>Browse verified donations and request what your patients need</p>
   </div>
 </div>
-
+ 
 <div class="container">
-
-  <!-- Tabs -->
+ 
   <div class="tabs">
     <button class="tab-btn active" onclick="showTab('browse', this)">🌿 Browse Medicines</button>
     <button class="tab-btn" onclick="showTab('requests', this)">📋 My Requests ({{ my_requests|length }})</button>
   </div>
-
+ 
   <!-- Tab: Browse -->
   <div class="tab-pane active" id="tab-browse">
     {% if medicines %}
     <div class="med-grid">
       {% for m in medicines %}
       <div class="med-card">
-        {% if m[6] %}
-          <img src="{{ url_for('static', filename='uploads/' ~ m[6]) }}" class="med-photo" alt="{{ m[2] }}"/>
-        {% else %}
-          <div class="med-photo-placeholder">💊</div>
-        {% endif %}
+        <div class="med-photo-placeholder">💊</div>
         <div class="med-body">
-          <div class="med-name">{{ m[2] }}</div>
+          <div class="med-name">{{ m.name }}</div>
           <div class="med-meta">
-            📦 Qty: {{ m[3] }}<br/>
-            📅 Expires: {{ m[4] }}<br/>
-            🙋 Donor: {{ m[9] }}
+            📦 Qty: {{ m.quantity }}<br/>
+            📅 Expires: {{ m.expiry_date }}<br/>
+            🙋 Donor: {{ m.donor_name }}
           </div>
-          {% if m[5] %}<p style="font-size:0.8rem; color:#6b7c74; margin-top:0.5rem;">{{ m[5] }}</p>{% endif %}
+          {% if m.description %}<p style="font-size:0.8rem; color:#6b7c74; margin-top:0.5rem;">{{ m.description }}</p>{% endif %}
         </div>
         <div class="med-footer" style="flex-direction:column; align-items:stretch; gap:0.6rem;">
-          <form method="POST" action="{{ url_for('request_medicine', med_id=m[0]) }}">
+          <form method="POST" action="{{ url_for('request_medicine', med_id=m.id) }}">
             <input type="text" name="note" class="form-control"
                    placeholder="Why do you need this? (optional)"
                    style="font-size:0.8rem; padding:0.5rem 0.8rem; margin-bottom:0.5rem;"/>
@@ -56,7 +51,7 @@
     </div>
     {% endif %}
   </div>
-
+ 
   <!-- Tab: My Requests -->
   <div class="tab-pane" id="tab-requests">
     {% if my_requests %}
@@ -77,12 +72,18 @@
           {% for r in my_requests %}
           <tr>
             <td>{{ loop.index }}</td>
-            <td><strong>{{ r[5] }}</strong></td>
-            <td>{{ r[6] }}</td>
-            <td>{{ r[7] }}</td>
-            <td>{{ r[3] or '—' }}</td>
-            <td><span class="badge badge-{{ r[4] }}">{{ r[4]|replace('_',' ')|title }}</span></td>
-            <td>{{ r[8].strftime('%d %b %Y') if r[8] else '' }}</td>
+            <td><strong>{{ r.med_name }}</strong></td>
+            <td>{{ r.quantity }}</td>
+            <td>{{ r.expiry_date }}</td>
+            <td>{{ r.note or '—' }}</td>
+            <td>
+              {% if r.status == 'delivered' %}
+                <span style="color:#2e7d52; font-weight:600;">✅ Successfully Delivered</span>
+              {% else %}
+                <span class="badge badge-{{ r.status }}">{{ r.status|replace('_',' ')|title }}</span>
+              {% endif %}
+            </td>
+            <td>{{ r.created_at.strftime('%d %b %Y') if r.created_at else '' }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -95,9 +96,9 @@
     </div>
     {% endif %}
   </div>
-
+ 
 </div>
-
+ 
 <script>
 function showTab(name, btn) {
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
