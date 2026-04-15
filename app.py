@@ -122,9 +122,6 @@ def donate():
     if request.method == 'POST':
         name    = request.form['medicine_name']
         phone = request.form['phone']
-
-if not phone:
-    return "Phone number required"
         qty     = request.form['quantity']
         expiry  = request.form['expiry_date']
         desc    = request.form['description']
@@ -132,6 +129,8 @@ if not phone:
         filename = ''
         exp_date = datetime.datetime.strptime(expiry, '%Y-%m-%d').date()
         min_date = datetime.date.today() + datetime.timedelta(days=30)
+        if not phone:
+          return "Phone number required"
         if exp_date < min_date:
             flash('Expiry date must be at least 30 days from today.', 'error')
             return redirect(url_for('donate'))
