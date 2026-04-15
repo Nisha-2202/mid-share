@@ -1,10 +1,21 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask_mail import Mail, Message
+import random
 import pymysql
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import os, datetime
 
 app = Flask(__name__)
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'your_email@gmail.com'
+app.config['MAIL_PASSWORD'] = 'your_app_password'
+
+mail = Mail(app)
+
+otp_storage = {}
 app.secret_key = os.environ.get('SECRET_KEY', 'medishare_secret_2024')
 
 UPLOAD_FOLDER = 'static/uploads'
@@ -110,6 +121,10 @@ def donate():
         return redirect(url_for('login'))
     if request.method == 'POST':
         name    = request.form['medicine_name']
+        phone = request.form['phone']
+
+if not phone:
+    return "Phone number required"
         qty     = request.form['quantity']
         expiry  = request.form['expiry_date']
         desc    = request.form['description']
@@ -137,6 +152,65 @@ def donate():
         return redirect(url_for('donor_dashboard'))
     min_date = (datetime.date.today() + datetime.timedelta(days=30)).strftime('%Y-%m-%d')
     return render_template('donate.html', min_date=min_date)
+    @app.route('/send-otp', methods=['POST'])
+def send_otp():
+    email = request.form['email']
+    otp = str(random.randint(100000, 999999))
+
+    otp_storage[email] = otp
+
+    msg = Message('OTP Verification',
+                  sender=app.config['MAIL_USERNAME'],
+                  recipients=[email])
+    msg.body = f'Your OTP is {otp}'
+
+    mail.send(msg)
+
+    return "OTP Sent"
+    @app.route('/verify-otp', methods=['POST'])
+def verify_otp():
+    email = request.form['email']
+    otp = request.form['otp']
+
+    if otp_storage.get(email) == otp:
+        return "OTP Verified"
+    return "Invalid OTP"
+    @app.route('/reset-password', methods=['POST'])
+def reset_password():
+    email = request.form['email']
+    new_password = request.form['new_password']
+
+    conn = get_db_connection()
+    conn.execute(
+        "UPDATE users SET password=%s WHERE email=%s",
+        (new_password, email)
+    )
+    conn.commit()
+
+    return "Password Updated"
+    @app.route('/admin')
+def admin():
+    conn = get_db_connection()
+    data = conn.execute("SELECT * FROM donations").fetchall()
+    return render_template('admin.html', donations=data)
+    @app.route('/approve/<int:id>')
+def approve(id):
+    conn = get_db_connection()
+    conn.execute(
+        "UPDATE donations SET status='approved' WHERE id=%s",
+        (id,)
+    )
+    conn.commit()
+    return redirect('/admin')
+    @app.route('/reject/<int:id>')
+def reject(id):
+    conn = get_db_connection()
+    conn.execute(
+        "UPDATE donations SET status='rejected' WHERE id=%s",
+        (id,)
+    )
+    conn.commit()
+    return redirect('/admin')
 
 @app.route('/ngo')
 def ngo_dashboard():
@@ -179,6 +253,14 @@ def request_medicine(med_id):
     except Exception as e:
         flash(f'Error: {str(e)}', 'error')
     return redirect(url_for('ngo_dashboard'))
+    @app.route('/medicines')
+def medicines():
+    conn = get_db_connection()
+    data = conn.execute(
+        "SELECT * FROM donations WHERE status='approved'"
+    ).fetchall()
+
+    return render_template('medicines.html', medicines=data)
 
 @app.route('/admin')
 def admin_dashboard():
