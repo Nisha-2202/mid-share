@@ -144,7 +144,7 @@ def verify_otp():
     if otp_storage.get(request.form['email']) == request.form['otp']:
         return "OTP Verified"
     return "Invalid OTP"
-    @app.route('/forgot-password')
+@app.route('/forgot-password')
 def forgot_password():
     return render_template('forgot_password.html')
 
