@@ -1,5 +1,5 @@
-flask
-pymysql
-werkzeug
+Flask
 gunicorn
-cryptography
+pymysql
+Flask-Mail
+Werkzeug
