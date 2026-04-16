@@ -273,12 +273,37 @@ def admin_dashboard():
     db = get_db()
     cur = db.cursor()
 
+    # All medicines
     cur.execute("SELECT * FROM medicines")
-    medicines = cur.fetchall()
+    all_meds = cur.fetchall()
+
+    # Pending medicines
+    cur.execute("SELECT * FROM medicines WHERE status='pending'")
+    pending_meds = cur.fetchall()
+
+    # Counts
+    pending = len(pending_meds)
+
+    cur.execute("SELECT * FROM medicines WHERE status='approved'")
+    approved = len(cur.fetchall())
+
+    # Dummy values (for now to avoid crash)
+    total_req = 0
+    donors = 0
+    all_requests = []
 
     db.close()
 
-    return render_template('admin_dashboard.html', medicines=medicines)
+    return render_template(
+        'admin_dashboard.html',
+        all_meds=all_meds,
+        pending_meds=pending_meds,
+        pending=pending,
+        approved=approved,
+        total_req=total_req,
+        donors=donors,
+        all_requests=all_requests
+    )
 
 @app.route('/admin/medicine/<int:med_id>/<action>')
 def admin_action(med_id, action):
