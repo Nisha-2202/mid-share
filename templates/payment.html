@@ -1,3 +1,11 @@
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <p style="color:green;">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+
+
 <!DOCTYPE html>
 <html>
 <head>
