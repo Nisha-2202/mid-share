@@ -3,10 +3,6 @@
     <p style="color:green;">{{ message }}</p>
   {% endfor %}
 {% endwith %}
-
-
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -27,6 +23,7 @@
       <li><a href="{{ url_for('donate') }}" class="nav-donate">+ Donate</a></li>
     {% elif session.user_role == 'ngo' %}
       <li><a href="{{ url_for('ngo_dashboard') }}">Browse Medicines</a></li>
+      <li><a href="/medicines">View Medicines</a></li>
     {% elif session.user_role == 'admin' %}
       <li><a href="{{ url_for('admin_dashboard') }}">Admin Panel</a></li>
     {% else %}
