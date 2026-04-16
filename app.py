@@ -7,151 +7,123 @@ from werkzeug.utils import secure_filename
 import os, datetime
 
 app = Flask(__name__)
+
+# ---------------- CONFIG ----------------
+app.secret_key = os.environ.get('SECRET_KEY', 'medishare_secret_2024')
+
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'your_email@gmail.com'
-app.config['MAIL_PASSWORD'] = 'your_app_password'
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 
 mail = Mail(app)
-
-otp_storage = {}
-app.secret_key = os.environ.get('SECRET_KEY', 'medishare_secret_2024')
 
 UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
+otp_storage = {}
+
+# ---------------- DATABASE ----------------
 def get_db():
     return pymysql.connect(
-        host     = os.environ.get('MYSQL_HOST',     'localhost'),
-        user     = os.environ.get('MYSQL_USER',     'root'),
-        password = os.environ.get('MYSQL_PASSWORD', ''),
-        database = os.environ.get('MYSQL_DB',       'railway'),
-        port     = int(os.environ.get('MYSQL_PORT', 3306)),
-        cursorclass = pymysql.cursors.DictCursor,
-        connect_timeout = 10
+        host=os.environ.get('MYSQL_HOST', 'localhost'),
+        user=os.environ.get('MYSQL_USER', 'root'),
+        password=os.environ.get('MYSQL_PASSWORD', ''),
+        database=os.environ.get('MYSQL_DB', 'railway'),
+        port=int(os.environ.get('MYSQL_PORT', 3306)),
+        cursorclass=pymysql.cursors.DictCursor
     )
 
+# ---------------- HELPERS ----------------
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# ---------------- ROUTES ----------------
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+# -------- AUTH --------
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        name     = request.form['name']
-        email    = request.form['email']
-        phone    = request.form['phone']
-        address  = request.form['address']
-        role     = request.form['role']
-        password = generate_password_hash(request.form['password'])
         try:
             db = get_db()
             cur = db.cursor()
+
+            email = request.form['email']
+
             cur.execute("SELECT id FROM users WHERE email=%s", (email,))
             if cur.fetchone():
                 flash('Email already registered.', 'error')
-                db.close()
                 return redirect(url_for('register'))
-            cur.execute("INSERT INTO users (name,email,phone,address,role,password) VALUES (%s,%s,%s,%s,%s,%s)",
-                        (name, email, phone, address, role, password))
+
+            password = generate_password_hash(request.form['password'])
+
+            cur.execute("""
+                INSERT INTO users (name,email,phone,address,role,password)
+                VALUES (%s,%s,%s,%s,%s,%s)
+            """, (
+                request.form['name'],
+                email,
+                request.form['phone'],
+                request.form['address'],
+                request.form['role'],
+                password
+            ))
+
             db.commit()
             db.close()
-            flash('Registration successful! Please log in.', 'success')
+
+            flash('Registration successful!', 'success')
             return redirect(url_for('login'))
+
         except Exception as e:
-            flash(f'Error: {str(e)}', 'error')
+            flash(str(e), 'error')
+
     return render_template('register.html')
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email    = request.form['email']
-        password = request.form['password']
         try:
             db = get_db()
             cur = db.cursor()
-            cur.execute("SELECT * FROM users WHERE email=%s", (email,))
+
+            cur.execute("SELECT * FROM users WHERE email=%s", (request.form['email'],))
             user = cur.fetchone()
             db.close()
-            if user and check_password_hash(user['password'], password):
-                session['user_id']   = user['id']
-                session['user_name'] = user['name']
+
+            if user and check_password_hash(user['password'], request.form['password']):
+                session['user_id'] = user['id']
                 session['user_role'] = user['role']
+
                 if user['role'] == 'admin':
                     return redirect(url_for('admin_dashboard'))
                 elif user['role'] == 'ngo':
                     return redirect(url_for('ngo_dashboard'))
                 else:
                     return redirect(url_for('donor_dashboard'))
-            flash('Invalid email or password.', 'error')
+
+            flash('Invalid login', 'error')
+
         except Exception as e:
-            flash(f'Database error: {str(e)}', 'error')
+            flash(str(e), 'error')
+
     return render_template('login.html')
+
 
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
 
-@app.route('/donor')
-def donor_dashboard():
-    if session.get('user_role') != 'donor':
-        return redirect(url_for('login'))
-    try:
-        db = get_db()
-        cur = db.cursor()
-        cur.execute("""SELECT m.*, u.name as ngo_name FROM medicines m
-            LEFT JOIN requests r ON r.medicine_id = m.id
-            LEFT JOIN users u ON u.id = r.ngo_id
-            WHERE m.donor_id = %s ORDER BY m.created_at DESC""", (session['user_id'],))
-        medicines = cur.fetchall()
-        db.close()
-    except:
-        medicines = []
-    return render_template('donor_dashboard.html', medicines=medicines)
-
-@app.route('/donate', methods=['GET', 'POST'])
-def donate():
-    if session.get('user_role') != 'donor':
-        return redirect(url_for('login'))
-    if request.method == 'POST':
-        name    = request.form['medicine_name']
-        phone = request.form['phone']
-        qty     = request.form['quantity']
-        expiry  = request.form['expiry_date']
-        desc    = request.form['description']
-        photo   = request.files.get('photo')
-        filename = ''
-        exp_date = datetime.datetime.strptime(expiry, '%Y-%m-%d').date()
-        min_date = datetime.date.today() + datetime.timedelta(days=30)
-        if not phone:
-          return "Phone number required"
-        if exp_date < min_date:
-            flash('Expiry date must be at least 30 days from today.', 'error')
-            return redirect(url_for('donate'))
-        if photo and allowed_file(photo.filename):
-            filename = secure_filename(photo.filename)
-            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-            photo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        try:
-            db = get_db()
-            cur = db.cursor()
-            cur.execute("INSERT INTO medicines (donor_id,name,quantity,expiry_date,description,photo,status) VALUES (%s,%s,%s,%s,%s,%s,'pending')",
-                        (session['user_id'], name, qty, expiry, desc, filename))
-            db.commit()
-            db.close()
-            flash('Medicine submitted for verification!', 'success')
-        except Exception as e:
-            flash(f'Error: {str(e)}', 'error')
-        return redirect(url_for('donor_dashboard'))
-    min_date = (datetime.date.today() + datetime.timedelta(days=30)).strftime('%Y-%m-%d')
-    return render_template('donate.html', min_date=min_date)
-    @app.route('/send-otp', methods=['POST'])
+# -------- OTP --------
+@app.route('/send-otp', methods=['POST'])
 def send_otp():
     email = request.form['email']
     otp = str(random.randint(100000, 999999))
@@ -164,163 +136,163 @@ def send_otp():
     msg.body = f'Your OTP is {otp}'
 
     mail.send(msg)
-
     return "OTP Sent"
-    @app.route('/verify-otp', methods=['POST'])
-def verify_otp():
-    email = request.form['email']
-    otp = request.form['otp']
 
-    if otp_storage.get(email) == otp:
+
+@app.route('/verify-otp', methods=['POST'])
+def verify_otp():
+    if otp_storage.get(request.form['email']) == request.form['otp']:
         return "OTP Verified"
     return "Invalid OTP"
-    @app.route('/reset-password', methods=['POST'])
-def reset_password():
-    email = request.form['email']
-    new_password = request.form['new_password']
 
-    conn = get_db_connection()
-    conn.execute(
-        "UPDATE users SET password=%s WHERE email=%s",
-        (new_password, email)
-    )
-    conn.commit()
+
+@app.route('/reset-password', methods=['POST'])
+def reset_password():
+    db = get_db()
+    cur = db.cursor()
+
+    hashed = generate_password_hash(request.form['new_password'])
+
+    cur.execute("UPDATE users SET password=%s WHERE email=%s",
+                (hashed, request.form['email']))
+
+    db.commit()
+    db.close()
 
     return "Password Updated"
-    @app.route('/admin')
-def admin():
-    conn = get_db_connection()
-    data = conn.execute("SELECT * FROM donations").fetchall()
-    return render_template('admin.html', donations=data)
-    @app.route('/approve/<int:id>')
-def approve(id):
-    conn = get_db_connection()
-    conn.execute(
-        "UPDATE donations SET status='approved' WHERE id=%s",
-        (id,)
-    )
-    conn.commit()
-    return redirect('/admin')
-    @app.route('/reject/<int:id>')
-def reject(id):
-    conn = get_db_connection()
-    conn.execute(
-        "UPDATE donations SET status='rejected' WHERE id=%s",
-        (id,)
-    )
-    conn.commit()
-    return redirect('/admin')
 
+# -------- DONOR --------
+@app.route('/donor')
+def donor_dashboard():
+    if session.get('user_role') != 'donor':
+        return redirect(url_for('login'))
+
+    db = get_db()
+    cur = db.cursor()
+
+    cur.execute("SELECT * FROM medicines WHERE donor_id=%s",
+                (session['user_id'],))
+    medicines = cur.fetchall()
+
+    db.close()
+
+    return render_template('donor_dashboard.html', medicines=medicines)
+
+
+@app.route('/donate', methods=['GET', 'POST'])
+def donate():
+    if session.get('user_role') != 'donor':
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        try:
+            photo = request.files.get('photo')
+            filename = ''
+
+            if photo and allowed_file(photo.filename):
+                filename = secure_filename(photo.filename)
+                os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+                photo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
+            db = get_db()
+            cur = db.cursor()
+
+            cur.execute("""
+                INSERT INTO medicines (donor_id,name,quantity,expiry_date,description,photo,status)
+                VALUES (%s,%s,%s,%s,%s,%s,'pending')
+            """, (
+                session['user_id'],
+                request.form['medicine_name'],
+                request.form['quantity'],
+                request.form['expiry_date'],
+                request.form['description'],
+                filename
+            ))
+
+            db.commit()
+            db.close()
+
+            flash('Submitted!', 'success')
+
+        except Exception as e:
+            flash(str(e), 'error')
+
+        return redirect(url_for('donor_dashboard'))
+
+    return render_template('donate.html')
+
+# -------- NGO --------
 @app.route('/ngo')
 def ngo_dashboard():
     if session.get('user_role') != 'ngo':
         return redirect(url_for('login'))
-    try:
-        db = get_db()
-        cur = db.cursor()
-        cur.execute("""SELECT m.*, u.name as donor_name FROM medicines m
-            JOIN users u ON u.id = m.donor_id
-            WHERE m.status='approved' ORDER BY m.created_at DESC""")
-        medicines = cur.fetchall()
-        cur.execute("""SELECT r.*, m.name as med_name, m.quantity, m.expiry_date
-            FROM requests r JOIN medicines m ON m.id = r.medicine_id
-            WHERE r.ngo_id=%s ORDER BY r.created_at DESC""", (session['user_id'],))
-        my_requests = cur.fetchall()
-        db.close()
-    except:
-        medicines = []
-        my_requests = []
-    return render_template('ngo_dashboard.html', medicines=medicines, my_requests=my_requests)
+
+    db = get_db()
+    cur = db.cursor()
+
+    cur.execute("SELECT * FROM medicines WHERE status='approved'")
+    medicines = cur.fetchall()
+
+    db.close()
+
+    return render_template('ngo_dashboard.html', medicines=medicines)
+
 
 @app.route('/request/<int:med_id>', methods=['POST'])
 def request_medicine(med_id):
     if session.get('user_role') != 'ngo':
         return redirect(url_for('login'))
-    note = request.form.get('note', '')
-    try:
-        db = get_db()
-        cur = db.cursor()
-        cur.execute("SELECT id FROM requests WHERE ngo_id=%s AND medicine_id=%s", (session['user_id'], med_id))
-        if cur.fetchone():
-            flash('You already requested this medicine.', 'error')
-        else:
-            cur.execute("INSERT INTO requests (ngo_id,medicine_id,note,status) VALUES (%s,%s,%s,'pending')",
-                        (session['user_id'], med_id, note))
-            db.commit()
-            flash('Request submitted successfully!', 'success')
-        db.close()
-    except Exception as e:
-        flash(f'Error: {str(e)}', 'error')
+
+    db = get_db()
+    cur = db.cursor()
+
+    cur.execute("""
+        INSERT INTO requests (ngo_id,medicine_id,note,status)
+        VALUES (%s,%s,%s,'pending')
+    """, (session['user_id'], med_id, request.form.get('note', '')))
+
+    db.commit()
+    db.close()
+
+    flash('Request sent!', 'success')
     return redirect(url_for('ngo_dashboard'))
-    @app.route('/medicines')
-def medicines():
-    conn = get_db_connection()
-    data = conn.execute(
-        "SELECT * FROM donations WHERE status='approved'"
-    ).fetchall()
 
-    return render_template('medicines.html', medicines=data)
-
+# -------- ADMIN --------
 @app.route('/admin')
 def admin_dashboard():
     if session.get('user_role') != 'admin':
         return redirect(url_for('login'))
-    try:
-        db = get_db()
-        cur = db.cursor()
-        cur.execute("SELECT COUNT(*) as c FROM medicines WHERE status='pending'")
-        pending = cur.fetchone()['c']
-        cur.execute("SELECT COUNT(*) as c FROM medicines WHERE status='approved'")
-        approved = cur.fetchone()['c']
-        cur.execute("SELECT COUNT(*) as c FROM requests")
-        total_req = cur.fetchone()['c']
-        cur.execute("SELECT COUNT(*) as c FROM users WHERE role='donor'")
-        donors = cur.fetchone()['c']
-        cur.execute("SELECT m.*, u.name as donor_name FROM medicines m JOIN users u ON u.id=m.donor_id WHERE m.status='pending' ORDER BY m.created_at DESC")
-        pending_meds = cur.fetchall()
-        cur.execute("SELECT m.*, u.name as donor_name FROM medicines m JOIN users u ON u.id=m.donor_id ORDER BY m.created_at DESC")
-        all_meds = cur.fetchall()
-        cur.execute("SELECT r.*, m.name as med_name, u.name as ngo_name FROM requests r JOIN medicines m ON m.id=r.medicine_id JOIN users u ON u.id=r.ngo_id ORDER BY r.created_at DESC")
-        all_requests = cur.fetchall()
-        db.close()
-    except Exception as e:
-        return f"Database error: {str(e)}", 500
-    return render_template('admin_dashboard.html',
-        pending=pending, approved=approved, total_req=total_req, donors=donors,
-        pending_meds=pending_meds, all_meds=all_meds, all_requests=all_requests)
+
+    db = get_db()
+    cur = db.cursor()
+
+    cur.execute("SELECT * FROM medicines")
+    medicines = cur.fetchall()
+
+    db.close()
+
+    return render_template('admin_dashboard.html', medicines=medicines)
+
 
 @app.route('/admin/medicine/<int:med_id>/<action>')
 def admin_action(med_id, action):
     if session.get('user_role') != 'admin':
         return redirect(url_for('login'))
+
     status = 'approved' if action == 'approve' else 'rejected'
-    try:
-        db = get_db()
-        cur = db.cursor()
-        cur.execute("UPDATE medicines SET status=%s WHERE id=%s", (status, med_id))
-        db.commit()
-        db.close()
-        flash(f'Medicine {status}.', 'success')
-    except Exception as e:
-        flash(f'Error: {str(e)}', 'error')
+
+    db = get_db()
+    cur = db.cursor()
+
+    cur.execute("UPDATE medicines SET status=%s WHERE id=%s",
+                (status, med_id))
+
+    db.commit()
+    db.close()
+
     return redirect(url_for('admin_dashboard'))
 
-@app.route('/admin/request/<int:req_id>/status', methods=['POST'])
-def update_delivery(req_id):
-    if session.get('user_role') != 'admin':
-        return redirect(url_for('login'))
-    status = request.form['status']
-    try:
-        db = get_db()
-        cur = db.cursor()
-        cur.execute("UPDATE requests SET status=%s WHERE id=%s", (status, req_id))
-        db.commit()
-        db.close()
-        flash('Delivery status updated.', 'success')
-    except Exception as e:
-        flash(f'Error: {str(e)}', 'error')
-    return redirect(url_for('admin_dashboard'))
-
+# -------- RUN --------
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
-    app.run(debug=False, host='0.0.0.0', port=port)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
