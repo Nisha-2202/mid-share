@@ -14,8 +14,7 @@ UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-otp_storage = {}
-verified_users = set()
+otp_storage = {}   # ✅ fixed OTP storage
 
 # ---------------- DATABASE ----------------
 def get_db():
@@ -107,52 +106,70 @@ def logout():
 def forgot_password():
     return render_template('forgot_password.html')
 
+# SEND OTP
 @app.route('/send-otp', methods=['POST'])
 def send_otp():
     email = request.form['email']
-    otp = str(random.randint(100000, 999999))
 
+    # check user exists
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT id FROM users WHERE email=%s", (email,))
+    user = cur.fetchone()
+    db.close()
+
+    if not user:
+        flash('Email not registered', 'error')
+        return redirect('/forgot-password')
+
+    otp = str(random.randint(100000, 999999))
     otp_storage[email] = otp
-    print(f"OTP for {email}: {otp}")
+
+    print(f"OTP for {email}: {otp}")  # console OTP
 
     flash('OTP sent! Check console', 'info')
     return redirect('/forgot-password')
 
+# VERIFY OTP
 @app.route('/verify-otp', methods=['POST'])
 def verify_otp():
     email = request.form['email']
     user_otp = request.form['otp']
 
-    if otp_storage.get(email) == user_otp:
-        verified_users.add(email)
-        otp_storage.pop(email, None)
-        flash('OTP Verified', 'success')
+    if email in otp_storage and otp_storage.get(email) == user_otp:
+        session['reset_email'] = email   # ✅ store verified email
+        flash('OTP Verified! Now reset password', 'success')
+        return redirect('/forgot-password')
     else:
         flash('Invalid OTP', 'error')
+        return redirect('/forgot-password')
 
-    return redirect('/forgot-password')
-
+# RESET PASSWORD
 @app.route('/reset-password', methods=['POST'])
 def reset_password():
-    email = request.form['email']
+    email = session.get('reset_email')
 
-    if email not in verified_users:
+    if not email:
         flash('Verify OTP first', 'error')
         return redirect('/forgot-password')
+
+    new_password = request.form['new_password']
 
     db = get_db()
     cur = db.cursor()
 
-    hashed = generate_password_hash(request.form['new_password'])
+    hashed = generate_password_hash(new_password)
 
     cur.execute("UPDATE users SET password=%s WHERE email=%s", (hashed, email))
 
     db.commit()
     db.close()
 
-    verified_users.remove(email)
+    # cleanup
+    otp_storage.pop(email, None)
+    session.pop('reset_email', None)
 
-    flash('Password updated', 'success')
+    flash('Password updated successfully', 'success')
     return redirect('/login')
 
 # -------- DONOR --------
@@ -209,7 +226,7 @@ def donate():
 
     return render_template('donate.html')
 
-# -------- MEDICINES (ALL USERS) --------
+# -------- MEDICINES --------
 @app.route('/medicines')
 def medicines():
     if 'user_id' not in session:
@@ -225,7 +242,7 @@ def medicines():
 
     return render_template('ngo_dashboard.html', medicines=medicines)
 
-# -------- REQUEST / ORDER --------
+# -------- REQUEST --------
 @app.route('/request/<int:med_id>', methods=['POST'])
 def request_medicine(med_id):
     if 'user_id' not in session:
@@ -257,7 +274,6 @@ def payment_success(request_id):
     cur = db.cursor()
 
     cur.execute("UPDATE requests SET status='approved' WHERE id=%s", (request_id,))
-
     db.commit()
     db.close()
 
@@ -273,24 +289,16 @@ def admin_dashboard():
     db = get_db()
     cur = db.cursor()
 
-    # All medicines
     cur.execute("SELECT * FROM medicines")
     all_meds = cur.fetchall()
 
-    # Pending medicines
     cur.execute("SELECT * FROM medicines WHERE status='pending'")
     pending_meds = cur.fetchall()
 
-    # Counts
     pending = len(pending_meds)
 
     cur.execute("SELECT * FROM medicines WHERE status='approved'")
     approved = len(cur.fetchall())
-
-    # Dummy values (for now to avoid crash)
-    total_req = 0
-    donors = 0
-    all_requests = []
 
     db.close()
 
@@ -300,9 +308,9 @@ def admin_dashboard():
         pending_meds=pending_meds,
         pending=pending,
         approved=approved,
-        total_req=total_req,
-        donors=donors,
-        all_requests=all_requests
+        total_req=0,
+        donors=0,
+        all_requests=[]
     )
 
 @app.route('/admin/medicine/<int:med_id>/<action>')
