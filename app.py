@@ -312,6 +312,30 @@ def admin_dashboard():
         donors=0,
         all_requests=[]
     )
+@app.route('/reset-password-direct', methods=['POST'])
+def reset_password_direct():
+    email = request.form['email']
+    new_password = request.form['new_password']
+
+    db = get_db()
+    cur = db.cursor()
+
+    # check user exists
+    cur.execute("SELECT * FROM users WHERE email=%s", (email,))
+    user = cur.fetchone()
+
+    if not user:
+        flash('Email not registered', 'error')
+        return redirect('/forgot-password')
+
+    hashed = generate_password_hash(new_password)
+
+    cur.execute("UPDATE users SET password=%s WHERE email=%s", (hashed, email))
+    db.commit()
+    db.close()
+
+    flash('Password updated successfully', 'success')
+    return redirect('/login')
 
 @app.route('/admin/medicine/<int:med_id>/<action>')
 def admin_action(med_id, action):
