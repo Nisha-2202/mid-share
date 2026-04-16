@@ -144,6 +144,9 @@ def verify_otp():
     else:
         return "Invalid OTP ❌"
 
+@app.route('/forgot-password')
+def forgot_password():
+    return render_template('forgot_password.html')
 
 @app.route('/reset-password', methods=['POST'])
 def reset_password():
