@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, session, flash
 import random
 import pymysql
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -14,7 +14,6 @@ UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# OTP storage
 otp_storage = {}
 verified_users = set()
 
@@ -33,7 +32,7 @@ def get_db():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# ---------------- ROUTES ----------------
+# ---------------- HOME ----------------
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -90,10 +89,8 @@ def login():
 
             if user['role'] == 'admin':
                 return redirect('/admin')
-            elif user['role'] == 'ngo':
-                return redirect('/ngo')
             else:
-                return redirect('/donor')
+                return redirect('/medicines')
 
         flash('Invalid login', 'error')
 
@@ -110,20 +107,17 @@ def logout():
 def forgot_password():
     return render_template('forgot_password.html')
 
-# -------- SEND OTP --------
 @app.route('/send-otp', methods=['POST'])
 def send_otp():
     email = request.form['email']
     otp = str(random.randint(100000, 999999))
 
     otp_storage[email] = otp
-
-    print(f"OTP for {email}: {otp}")  # check in Railway logs
+    print(f"OTP for {email}: {otp}")
 
     flash('OTP sent! Check console', 'info')
     return redirect('/forgot-password')
 
-# -------- VERIFY OTP --------
 @app.route('/verify-otp', methods=['POST'])
 def verify_otp():
     email = request.form['email']
@@ -138,13 +132,12 @@ def verify_otp():
 
     return redirect('/forgot-password')
 
-# -------- RESET PASSWORD --------
 @app.route('/reset-password', methods=['POST'])
 def reset_password():
     email = request.form['email']
 
     if email not in verified_users:
-        flash('Please verify OTP first', 'error')
+        flash('Verify OTP first', 'error')
         return redirect('/forgot-password')
 
     db = get_db()
@@ -152,15 +145,14 @@ def reset_password():
 
     hashed = generate_password_hash(request.form['new_password'])
 
-    cur.execute("UPDATE users SET password=%s WHERE email=%s",
-                (hashed, email))
+    cur.execute("UPDATE users SET password=%s WHERE email=%s", (hashed, email))
 
     db.commit()
     db.close()
 
     verified_users.remove(email)
 
-    flash('Password updated successfully', 'success')
+    flash('Password updated', 'success')
     return redirect('/login')
 
 # -------- DONOR --------
@@ -172,8 +164,7 @@ def donor_dashboard():
     db = get_db()
     cur = db.cursor()
 
-    cur.execute("SELECT * FROM medicines WHERE donor_id=%s",
-                (session['user_id'],))
+    cur.execute("SELECT * FROM medicines WHERE donor_id=%s", (session['user_id'],))
     medicines = cur.fetchall()
 
     db.close()
@@ -218,10 +209,10 @@ def donate():
 
     return render_template('donate.html')
 
-# -------- NGO --------
-@app.route('/ngo')
-def ngo_dashboard():
-    if session.get('user_role') != 'ngo':
+# -------- MEDICINES (ALL USERS) --------
+@app.route('/medicines')
+def medicines():
+    if 'user_id' not in session:
         return redirect('/login')
 
     db = get_db()
@@ -234,10 +225,10 @@ def ngo_dashboard():
 
     return render_template('ngo_dashboard.html', medicines=medicines)
 
-# -------- REQUEST --------
+# -------- REQUEST / ORDER --------
 @app.route('/request/<int:med_id>', methods=['POST'])
 def request_medicine(med_id):
-    if session.get('user_role') != 'ngo':
+    if 'user_id' not in session:
         return redirect('/login')
 
     db = get_db()
@@ -265,15 +256,13 @@ def payment_success(request_id):
     db = get_db()
     cur = db.cursor()
 
-    cur.execute("""
-        UPDATE requests SET status='approved' WHERE id=%s
-    """, (request_id,))
+    cur.execute("UPDATE requests SET status='approved' WHERE id=%s", (request_id,))
 
     db.commit()
     db.close()
 
     flash('Payment Successful! Order Confirmed', 'success')
-    return redirect('/ngo')
+    return redirect('/medicines')
 
 # -------- ADMIN --------
 @app.route('/admin')
@@ -298,8 +287,7 @@ def admin_action(med_id, action):
     db = get_db()
     cur = db.cursor()
 
-    cur.execute("UPDATE medicines SET status=%s WHERE id=%s",
-                (status, med_id))
+    cur.execute("UPDATE medicines SET status=%s WHERE id=%s", (status, med_id))
 
     db.commit()
     db.close()
