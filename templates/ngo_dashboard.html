@@ -1,7 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}NGO Dashboard — MediShare{% endblock %}
+
 {% block content %}
- 
+
+<!-- FLASH MESSAGE -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <p style="color:green; text-align:center;">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
 <div class="page-header">
   <div class="inner">
     <div class="label">NGO Portal</div>
@@ -9,112 +17,125 @@
     <p>Browse verified donations and request what your patients need</p>
   </div>
 </div>
- 
+
 <div class="container">
- 
+
   <div class="tabs">
     <button class="tab-btn active" onclick="showTab('browse', this)">🌿 Browse Medicines</button>
-    <button class="tab-btn" onclick="showTab('requests', this)">📋 My Requests ({{ my_requests|length }})</button>
+    <button class="tab-btn" onclick="showTab('requests', this)">
+      📋 My Requests ({{ my_requests|length if my_requests else 0 }})
+    </button>
   </div>
- 
-  <!-- Tab: Browse -->
+
+  <!-- ================= BROWSE ================= -->
   <div class="tab-pane active" id="tab-browse">
+
     {% if medicines %}
     <div class="med-grid">
+
       {% for m in medicines %}
       <div class="med-card">
-        <div class="med-photo-placeholder">💊</div>
+
+        <!-- IMAGE -->
+        {% if m.photo %}
+          <img src="{{ url_for('static', filename='uploads/' + m.photo) }}" width="100%" height="150">
+        {% else %}
+          <div class="med-photo-placeholder">💊</div>
+        {% endif %}
+
         <div class="med-body">
           <div class="med-name">{{ m.name }}</div>
+
           <div class="med-meta">
-            📦 Qty: {{ m.quantity }}<br/>
-            📅 Expires: {{ m.expiry_date }}<br/>
-            🙋 Donor: {{ m.donor_name }}
+            📦 Qty: {{ m.quantity }}<br>
+            📅 Expiry: {{ m.expiry_date }}<br>
           </div>
-          {% if m.description %}<p style="font-size:0.8rem; color:#6b7c74; margin-top:0.5rem;">{{ m.description }}</p>{% endif %}
+
+          {% if m.description %}
+          <p style="font-size:0.8rem; color:#6b7c74;">
+            {{ m.description }}
+          </p>
+          {% endif %}
         </div>
-        <div class="med-footer" style="flex-direction:column; align-items:stretch; gap:0.6rem;">
+
+        <!-- ORDER -->
+        <div class="med-footer">
           <form method="POST" action="{{ url_for('request_medicine', med_id=m.id) }}">
-            <input type="text" name="note" class="form-control"
-                   placeholder="Why do you need this? (optional)"
-                   style="font-size:0.8rem; padding:0.5rem 0.8rem; margin-bottom:0.5rem;"/>
-            <button type="submit" class="btn btn-primary btn-sm btn-full">Request This →</button>
+            <input type="text" name="note"
+                   placeholder="Optional note"
+                   style="width:100%; margin-bottom:5px; padding:5px;">
+
+            <button type="submit" style="width:100%; background:green; color:white;">
+              Order Now 💳
+            </button>
           </form>
         </div>
+
       </div>
       {% endfor %}
+
     </div>
+
     {% else %}
-    <div class="empty">
-      <div class="empty-icon">🌿</div>
-      <p>No approved medicines available right now. Check back soon!</p>
-    </div>
+    <p style="text-align:center;">No medicines available</p>
     {% endif %}
+
   </div>
- 
-  <!-- Tab: My Requests -->
+
+  <!-- ================= REQUESTS ================= -->
   <div class="tab-pane" id="tab-requests">
+
     {% if my_requests %}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Medicine</th>
-            <th>Qty</th>
-            <th>Expiry</th>
-            <th>Note</th>
-            <th>Status</th>
-            <th>Requested On</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in my_requests %}
-          <tr>
-            <td>{{ loop.index }}</td>
-            <td><strong>{{ r.med_name }}</strong></td>
-            <td>{{ r.quantity }}</td>
-            <td>{{ r.expiry_date }}</td>
-            <td>{{ r.note or '—' }}</td>
-            <td>
-              {% if r.status == 'delivered' %}
-                <span style="color:#2e7d52; font-weight:600;">✅ Successfully Delivered</span>
-              {% else %}
-                <span class="badge badge-{{ r.status }}">{{ r.status|replace('_',' ')|title }}</span>
-              {% endif %}
-            </td>
-            <td>{{ r.created_at.strftime('%d %b %Y') if r.created_at else '' }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+    <table border="1" width="100%" cellpadding="10">
+
+      <tr>
+        <th>#</th>
+        <th>Medicine</th>
+        <th>Qty</th>
+        <th>Status</th>
+        <th>Date</th>
+      </tr>
+
+      {% for r in my_requests %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ r.medicine_name }}</td>
+        <td>{{ r.quantity }}</td>
+
+        <td>
+          {% if r.status == 'approved' %}
+            <span style="color:green;">✅ Paid & Confirmed</span>
+          {% elif r.status == 'pending' %}
+            <span style="color:orange;">⏳ Pending</span>
+          {% else %}
+            <span style="color:red;">❌ Rejected</span>
+          {% endif %}
+        </td>
+
+        <td>
+          {{ r.created_at.strftime('%d-%m-%Y') if r.created_at else '' }}
+        </td>
+      </tr>
+      {% endfor %}
+
+    </table>
+
     {% else %}
-    <div class="empty">
-      <div class="empty-icon">📋</div>
-      <p>You haven't requested any medicines yet.</p>
-    </div>
+    <p style="text-align:center;">No requests yet</p>
     {% endif %}
+
   </div>
- 
+
 </div>
 
-
-<h2>My Orders</h2>
-
-{% for r in my_requests %}
-<div style="border:1px solid black; margin:10px; padding:10px;">
-    <p>Medicine: {{ r.medicine_name }}</p>
-    <p>Status: {{ r.status }}</p>
-</div>
-{% endfor %}
- 
 <script>
 function showTab(name, btn) {
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
 }
 </script>
+
 {% endblock %}
