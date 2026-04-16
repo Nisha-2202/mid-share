@@ -244,7 +244,7 @@ def ngo_dashboard():
 @app.route('/request/<int:med_id>', methods=['POST'])
 def request_medicine(med_id):
     if session.get('user_role') != 'ngo':
-        return redirect(url_for('login'))
+        return redirect('/login')
 
     db = get_db()
     cur = db.cursor()
@@ -254,11 +254,39 @@ def request_medicine(med_id):
         VALUES (%s,%s,%s,'pending')
     """, (session['user_id'], med_id, request.form.get('note', '')))
 
+    request_id = cur.lastrowid   # important
+
     db.commit()
     db.close()
 
-    flash('Request sent!', 'success')
-    return redirect(url_for('ngo_dashboard'))
+    return redirect(f'/payment/{request_id}')
+
+# -------- PAYMENT --------
+@app.route('/payment/<int:request_id>')
+def payment_page(request_id):
+    if session.get('user_role') != 'ngo':
+        return redirect('/login')
+
+    return render_template('payment.html', request_id=request_id)
+
+
+@app.route('/payment-success/<int:request_id>', methods=['POST'])
+def payment_success(request_id):
+    db = get_db()
+    cur = db.cursor()
+
+    # update request status
+    cur.execute("""
+        UPDATE requests 
+        SET status='approved' 
+        WHERE id=%s
+    """, (request_id,))
+
+    db.commit()
+    db.close()
+
+    flash('Payment Successful! Order Confirmed', 'success')
+    return redirect('/ngo')
 
 # -------- ADMIN --------
 @app.route('/admin')
