@@ -191,7 +191,7 @@ def donate():
 
         cur.execute("""
             INSERT INTO medicines (donor_id,name,quantity,expiry_date,description,photo,status)
-            VALUES (%s,%s,%s,%s,%s,%s,'approved')
+            VALUES (%s,%s,%s,%s,%s,%s,'pending')
         """, (
             session['user_id'],
             request.form['medicine_name'],
