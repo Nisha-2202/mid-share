@@ -130,23 +130,19 @@ def send_otp():
 
     otp_storage[email] = otp
 
-    msg = Message('OTP Verification',
-                  sender=app.config['MAIL_USERNAME'],
-                  recipients=[email])
-    msg.body = f'Your OTP is {otp}'
-
-    mail.send(msg)
-    return "OTP Sent"
+    # Instead of sending mail → just show OTP
+    return f"Your OTP is: {otp}"
 
 
 @app.route('/verify-otp', methods=['POST'])
 def verify_otp():
-    if otp_storage.get(request.form['email']) == request.form['otp']:
-        return "OTP Verified"
-    return "Invalid OTP"
-@app.route('/forgot-password')
-def forgot_password():
-    return render_template('forgot_password.html')
+    email = request.form['email']
+    user_otp = request.form['otp']
+
+    if otp_storage.get(email) == user_otp:
+        return "OTP Verified ✅"
+    else:
+        return "Invalid OTP ❌"
 
 
 @app.route('/reset-password', methods=['POST'])
