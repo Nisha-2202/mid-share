@@ -7,10 +7,18 @@
 
 <h2>Payment Page</h2>
 
-<p>Total Amount: ₹100 (Demo)</p>
+<p>Your Request ID: {{ request_id }}</p>
+
+<h3>Select Payment Method</h3>
 
 <form action="/payment-success/{{ request_id }}" method="post">
+    
+    <input type="radio" name="method" checked> UPI <br>
+    <input type="radio" name="method"> Card <br>
+    <input type="radio" name="method"> Cash <br><br>
+
     <button type="submit">Pay Now</button>
+
 </form>
 
 </body>
