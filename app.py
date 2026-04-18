@@ -300,7 +300,7 @@ def admin_dashboard():
     cur.execute("SELECT * FROM medicines WHERE status='approved'")
     approved = len(cur.fetchall())
     cur.execute("SELECT COUNT(*) FROM users WHERE role='donor'")
-    donors = cur.fetchone()[0]
+    donors = cur.fetchone()['COUNT(*)']
     db.close()
 
     return render_template(
