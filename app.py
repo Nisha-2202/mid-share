@@ -299,7 +299,8 @@ def admin_dashboard():
 
     cur.execute("SELECT * FROM medicines WHERE status='approved'")
     approved = len(cur.fetchall())
-
+    cur.execute("SELECT COUNT(*) FROM users WHERE role='donor'")
+    donors = cur.fetchone()[0]
     db.close()
 
     return render_template(
@@ -309,7 +310,7 @@ def admin_dashboard():
         pending=pending,
         approved=approved,
         total_req=0,
-        donors=0,
+        donors=donors,  
         all_requests=[]
     )
 @app.route('/reset-password-direct', methods=['POST'])
