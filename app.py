@@ -103,8 +103,10 @@ def login():
 
             if user['role'] == 'admin':
                 return redirect('/admin')
+            elif  user['role'] == 'ngo':
+                 return redirect('/ngo_dashboard') 
             else:
-                return redirect('/medicines')
+                return redirect('/donor')
 
         flash('Invalid login', 'error')
 
@@ -258,26 +260,28 @@ def medicines():
     return render_template('ngo_dashboard.html', medicines=medicines)
 
 # -------- REQUEST --------
-@app.route('/request/<int:med_id>', methods=['POST'])
+@app.route('/request_medicine/<int:med_id>', methods=['POST'])
 def request_medicine(med_id):
-    if 'user_id' not in session:
+    if session.get('user_role') != 'ngo':
         return redirect('/login')
 
     db = get_db()
     cur = db.cursor()
 
     cur.execute("""
-        INSERT INTO requests (ngo_id,medicine_id,note,status)
-        VALUES (%s,%s,%s,'pending')
-    """, (session['user_id'], med_id, request.form.get('note', '')))
-
-    request_id = cur.lastrowid
+        INSERT INTO requests (ngo_id, medicine_id, note, status)
+        VALUES (%s, %s, %s, 'pending')
+    """, (
+        session['user_id'],
+        med_id,
+        request.form.get('note', '')
+    ))
 
     db.commit()
     db.close()
 
-    return redirect(f'/payment/{request_id}')
-
+    flash('Request sent successfully', 'success')
+    return redirect('/ngo_dashboard')
 # -------- PAYMENT --------
 @app.route('/payment/<int:request_id>')
 def payment_page(request_id):
@@ -352,6 +356,38 @@ def reset_password_direct():
 
     flash('Password updated successfully', 'success')
     return redirect('/login')
+
+
+@app.route('/ngo_dashboard')
+def ngo_dashboard():
+    if session.get('user_role') != 'ngo':
+        return redirect('/login')
+
+    db = get_db()
+    cur = db.cursor()
+
+    # Get approved medicines
+    cur.execute("SELECT * FROM medicines WHERE status='approved'")
+    medicines = cur.fetchall()
+
+    # Get NGO requests
+    cur.execute("""
+        SELECT r.*, m.name AS medicine_name
+        FROM requests r
+        JOIN medicines m ON r.medicine_id = m.id
+        WHERE r.ngo_id=%s
+        ORDER BY r.id DESC
+    """, (session['user_id'],))
+    
+    my_requests = cur.fetchall()
+
+    db.close()
+
+    return render_template(
+        'ngo_dashboard.html',
+        medicines=medicines,
+        my_requests=my_requests
+    )
 
 @app.route('/admin/medicine/<int:med_id>/<action>')
 def admin_action(med_id, action):
