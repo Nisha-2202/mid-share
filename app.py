@@ -43,23 +43,38 @@ def register():
         db = get_db()
         cur = db.cursor()
 
-        email = request.form['email']
+        # ✅ Safe form handling
+        name = request.form.get('name')
+        email = request.form.get('email')
+        phone = request.form.get('phone')
+        address = request.form.get('address')
+        role = request.form.get('role')
+        password_raw = request.form.get('password')
+
+        # ✅ Validation (prevents 500 error)
+        if not name or not email or not phone or not role or not password_raw:
+            flash('All fields are required', 'error')
+            return redirect('/register')
+
+        # Check if email already exists
         cur.execute("SELECT id FROM users WHERE email=%s", (email,))
         if cur.fetchone():
             flash('Email already registered', 'error')
             return redirect('/register')
 
-        password = generate_password_hash(request.form['password'])
+        # Hash password
+        password = generate_password_hash(password_raw)
 
+        # Insert user
         cur.execute("""
-            INSERT INTO users (name,email,phone,address,role,password)
-            VALUES (%s,%s,%s,%s,%s,%s)
+            INSERT INTO users (name, email, phone, address, role, password)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """, (
-            request.form['name'],
+            name,
             email,
-            request.form['phone'],
-            request.form['address'],
-            request.form['role'],
+            phone,
+            address if address else '',
+            role,
             password
         ))
 
