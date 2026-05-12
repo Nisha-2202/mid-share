@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, session, flash
 import random
-import pymysql
+import psycopg2
+import psycopg2.extras
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import os
@@ -14,17 +15,18 @@ UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-otp_storage = {}   # ✅ fixed OTP storage
+otp_storage = {}
 
 # ---------------- DATABASE ----------------
 def get_db():
-    return pymysql.connect(
-        host=os.environ.get('MYSQL_HOST', 'localhost'),
-        user=os.environ.get('MYSQL_USER', 'root'),
-        password=os.environ.get('MYSQL_PASSWORD', ''),
-        database=os.environ.get('MYSQL_DB', 'railway'),
-        port=int(os.environ.get('MYSQL_PORT', 3306)),
-        cursorclass=pymysql.cursors.DictCursor
+    return psycopg2.connect(
+        host=os.environ.get('DB_HOST'),
+        user=os.environ.get('DB_USER'),
+        password=os.environ.get('DB_PASSWORD'),
+        dbname=os.environ.get('DB_NAME'),
+        port=int(os.environ.get('DB_PORT', 5432)),
+        sslmode='require',
+        cursor_factory=psycopg2.extras.RealDictCursor
     )
 
 # ---------------- HELPERS ----------------
@@ -43,7 +45,6 @@ def register():
         db = get_db()
         cur = db.cursor()
 
-        # ✅ Safe form handling
         name = request.form.get('name')
         email = request.form.get('email')
         phone = request.form.get('phone')
@@ -51,32 +52,21 @@ def register():
         role = request.form.get('role')
         password_raw = request.form.get('password')
 
-        # ✅ Validation (prevents 500 error)
         if not name or not email or not phone or not role or not password_raw:
             flash('All fields are required', 'error')
             return redirect('/register')
 
-        # Check if email already exists
         cur.execute("SELECT id FROM users WHERE email=%s", (email,))
         if cur.fetchone():
             flash('Email already registered', 'error')
             return redirect('/register')
 
-        # Hash password
         password = generate_password_hash(password_raw)
 
-        # Insert user
         cur.execute("""
             INSERT INTO users (name, email, phone, address, role, password)
             VALUES (%s, %s, %s, %s, %s, %s)
-        """, (
-            name,
-            email,
-            phone,
-            address if address else '',
-            role,
-            password
-        ))
+        """, (name, email, phone, address if address else '', role, password))
 
         db.commit()
         db.close()
@@ -103,8 +93,8 @@ def login():
 
             if user['role'] == 'admin':
                 return redirect('/admin')
-            elif  user['role'] == 'ngo':
-                 return redirect('/ngo_dashboard') 
+            elif user['role'] == 'ngo':
+                return redirect('/ngo_dashboard')
             else:
                 return redirect('/donor')
 
@@ -128,7 +118,6 @@ def forgot_password():
 def send_otp():
     email = request.form['email']
 
-    # check user exists
     db = get_db()
     cur = db.cursor()
     cur.execute("SELECT id FROM users WHERE email=%s", (email,))
@@ -142,7 +131,7 @@ def send_otp():
     otp = str(random.randint(100000, 999999))
     otp_storage[email] = otp
 
-    print(f"OTP for {email}: {otp}")  # console OTP
+    print(f"OTP for {email}: {otp}")
 
     flash('OTP sent! Check console', 'info')
     return redirect('/forgot-password')
@@ -154,7 +143,7 @@ def verify_otp():
     user_otp = request.form['otp']
 
     if email in otp_storage and otp_storage.get(email) == user_otp:
-        session['reset_email'] = email   # ✅ store verified email
+        session['reset_email'] = email
         flash('OTP Verified! Now reset password', 'success')
         return redirect('/forgot-password')
     else:
@@ -171,18 +160,14 @@ def reset_password():
         return redirect('/forgot-password')
 
     new_password = request.form['new_password']
+    hashed = generate_password_hash(new_password)
 
     db = get_db()
     cur = db.cursor()
-
-    hashed = generate_password_hash(new_password)
-
     cur.execute("UPDATE users SET password=%s WHERE email=%s", (hashed, email))
-
     db.commit()
     db.close()
 
-    # cleanup
     otp_storage.pop(email, None)
     session.pop('reset_email', None)
 
@@ -197,10 +182,8 @@ def donor_dashboard():
 
     db = get_db()
     cur = db.cursor()
-
     cur.execute("SELECT * FROM medicines WHERE donor_id=%s", (session['user_id'],))
     medicines = cur.fetchall()
-
     db.close()
 
     return render_template('donor_dashboard.html', medicines=medicines)
@@ -224,8 +207,8 @@ def donate():
         cur = db.cursor()
 
         cur.execute("""
-            INSERT INTO medicines (donor_id,name,quantity,expiry_date,description,photo,status)
-            VALUES (%s,%s,%s,%s,%s,%s,'pending')
+            INSERT INTO medicines (donor_id, name, quantity, expiry_date, description, photo, status)
+            VALUES (%s, %s, %s, %s, %s, %s, 'pending')
         """, (
             session['user_id'],
             request.form['medicine_name'],
@@ -251,10 +234,8 @@ def medicines():
 
     db = get_db()
     cur = db.cursor()
-
     cur.execute("SELECT * FROM medicines WHERE status='approved'")
     medicines = cur.fetchall()
-
     db.close()
 
     return render_template('ngo_dashboard.html', medicines=medicines)
@@ -271,17 +252,14 @@ def request_medicine(med_id):
     cur.execute("""
         INSERT INTO requests (ngo_id, medicine_id, note, status)
         VALUES (%s, %s, %s, 'pending')
-    """, (
-        session['user_id'],
-        med_id,
-        request.form.get('note', '')
-    ))
+    """, (session['user_id'], med_id, request.form.get('note', '')))
 
     db.commit()
     db.close()
 
     flash('Request sent successfully', 'success')
     return redirect('/ngo_dashboard')
+
 # -------- PAYMENT --------
 @app.route('/payment/<int:request_id>')
 def payment_page(request_id):
@@ -291,7 +269,6 @@ def payment_page(request_id):
 def payment_success(request_id):
     db = get_db()
     cur = db.cursor()
-
     cur.execute("UPDATE requests SET status='approved' WHERE id=%s", (request_id,))
     db.commit()
     db.close()
@@ -313,13 +290,14 @@ def admin_dashboard():
 
     cur.execute("SELECT * FROM medicines WHERE status='pending'")
     pending_meds = cur.fetchall()
-
     pending = len(pending_meds)
 
     cur.execute("SELECT * FROM medicines WHERE status='approved'")
     approved = len(cur.fetchall())
+
     cur.execute("SELECT COUNT(*) FROM users WHERE role='donor'")
-    donors = cur.fetchone()['COUNT(*)']
+    donors = cur.fetchone()['count']
+
     db.close()
 
     return render_template(
@@ -329,9 +307,10 @@ def admin_dashboard():
         pending=pending,
         approved=approved,
         total_req=0,
-        donors=donors,  
+        donors=donors,
         all_requests=[]
     )
+
 @app.route('/reset-password-direct', methods=['POST'])
 def reset_password_direct():
     email = request.form['email']
@@ -340,7 +319,6 @@ def reset_password_direct():
     db = get_db()
     cur = db.cursor()
 
-    # check user exists
     cur.execute("SELECT * FROM users WHERE email=%s", (email,))
     user = cur.fetchone()
 
@@ -349,14 +327,12 @@ def reset_password_direct():
         return redirect('/forgot-password')
 
     hashed = generate_password_hash(new_password)
-
     cur.execute("UPDATE users SET password=%s WHERE email=%s", (hashed, email))
     db.commit()
     db.close()
 
     flash('Password updated successfully', 'success')
     return redirect('/login')
-
 
 @app.route('/ngo_dashboard')
 def ngo_dashboard():
@@ -366,11 +342,9 @@ def ngo_dashboard():
     db = get_db()
     cur = db.cursor()
 
-    # Get approved medicines
     cur.execute("SELECT * FROM medicines WHERE status='approved'")
     medicines = cur.fetchall()
 
-    # Get NGO requests
     cur.execute("""
         SELECT r.*, m.name AS medicine_name
         FROM requests r
@@ -378,16 +352,11 @@ def ngo_dashboard():
         WHERE r.ngo_id=%s
         ORDER BY r.id DESC
     """, (session['user_id'],))
-    
     my_requests = cur.fetchall()
 
     db.close()
 
-    return render_template(
-        'ngo_dashboard.html',
-        medicines=medicines,
-        my_requests=my_requests
-    )
+    return render_template('ngo_dashboard.html', medicines=medicines, my_requests=my_requests)
 
 @app.route('/admin/medicine/<int:med_id>/<action>')
 def admin_action(med_id, action):
@@ -395,9 +364,7 @@ def admin_action(med_id, action):
 
     db = get_db()
     cur = db.cursor()
-
     cur.execute("UPDATE medicines SET status=%s WHERE id=%s", (status, med_id))
-
     db.commit()
     db.close()
 
