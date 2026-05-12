@@ -378,6 +378,21 @@ def admin_action(med_id, action):
     db.close()
 
     return redirect('/admin')
+    @app.route('/admin/update_delivery/<int:req_id>', methods=['POST'])
+def update_delivery(req_id):
+    if session.get('user_role') != 'admin':
+        return redirect('/login')
+    
+    status = request.form.get('status')
+    
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("UPDATE requests SET status=%s WHERE id=%s", (status, req_id))
+    db.commit()
+    db.close()
+    
+    flash('Status updated successfully', 'success')
+    return redirect('/admin')
 
 # -------- RUN --------
 if __name__ == '__main__':
