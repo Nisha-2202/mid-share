@@ -1,5 +1,5 @@
 Flask
 gunicorn
-pymysql
+psycopg2-binary
 Flask-Mail
 Werkzeug
