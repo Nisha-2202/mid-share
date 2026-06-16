@@ -2,7 +2,7 @@ MediShare — Medicine Donation Platform
 MediShare is a web application that connects medicine donors with NGOs. Donors can list unused medicines, NGOs can request them, and admins verify and manage the process.
 
 🌐 Live Demo
-https://web-production-e49906.up.railway.app
+https://mid-share.onrender.com/
 
 📁 Project Structure
 mid-share/
